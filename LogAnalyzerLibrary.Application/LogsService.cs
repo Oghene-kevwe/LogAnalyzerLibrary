@@ -3,124 +3,37 @@ using LogAnalyzerLibrary.Application.Shared;
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
-namespace LogAnalyzerLibrary.Application;
-
-public class LogsService : ILogsService
+namespace LogAnalyzerLibrary.Application
 {
-
-    public async Task<string> CountTotalLogsAsync(PeriodDTO archiveDto)
+    public class LogsService : ILogsService
     {
-        int logCount = 0;
-
-        // Iterate over the directories provided in the ArchiveDTO
-        foreach (var directoryPath in archiveDto.DirectoryPaths)
+        public async Task<string> CountTotalLogsAsync(PeriodDTO model)
         {
-            if (Directory.Exists(directoryPath))
+            int logCount = 0;
+
+            if (Directory.Exists(model.DirectoryPath))
             {
-                // Get all log files in the directory
-                var logFiles = await Task.Run(() => Directory.GetFiles(directoryPath, "*.log"));
-
-                // Count files in the date range
-                logCount += logFiles.Count(file => FileInDateRange.IsFileInDateRange(file, archiveDto.StartDate, archiveDto.EndDate));
+                var logFiles = await Task.Run(() => Directory.GetFiles(model.DirectoryPath, "*.log"));
+                logCount += logFiles.Count(file => FileInDateRange.IsFileInDateRange(file, model.StartDate, model.EndDate));
             }
+
+            return logCount == 0 ? "No logs found for the specified date range." : $"Total logs found: {logCount}";
         }
 
-        if (logCount == 0)
+        public async Task<ConcurrentDictionary<string, int>> CountDuplicatedErrorsAsync(DirectoryDTO model)
         {
-            return "No logs found for the specified date range.";
-        }
+            var fileErrorsCount = new ConcurrentDictionary<string, int>();
+            var formattedPath = model.DirectoryPath.Trim();
 
-        return $"Total logs found: {logCount}";
-    }
-
-
-    public async Task<ConcurrentDictionary<string, int>> CountDuplicatedErrorsAsync(DirectoriesDTO model)
-    {
-
-        var fileErrorsCount = new ConcurrentDictionary<string, int>();
-
-        var tasks = model.DirectoryPaths.Select(async path =>
-         {
-             var formatedPath = path.Trim();
-             try
-             {
-                 if (Directory.Exists(formatedPath))
-                 {
-                     //retrieve all log files from directory
-                     var logFiles = Directory.GetFiles(formatedPath, "*.log", SearchOption.AllDirectories);
-
-                     // process each log file 
-                     var logFileTasks = logFiles.Select(async logFile =>
-                     {
-                         var errorOccurrences = new ConcurrentDictionary<string, int>();
-
-                         var logLines = await File.ReadAllLinesAsync(logFile);
-
-                         foreach (var line in logLines)
-                         {
-                             var match = dateTimePattern.Match(line);
-
-                             if (match.Success)
-                             {
-                                 var errorMessage = ParseLogLine(line);
-                                 if (errorOccurrences.ContainsKey(errorMessage))
-                                 {
-                                     errorOccurrences[errorMessage]++;
-                                 }
-                                 else
-                                 {
-                                     errorOccurrences[errorMessage] = 1;
-                                 }
-                             }
-                         }
-
-                         var duplicatedErrors = errorOccurrences.Values.Count(x => x > 1);
-
-                         fileErrorsCount[logFile] = duplicatedErrors;
-                     });
-
-                     await Task.WhenAll(logFileTasks);
-                 }
-                 else
-                 {
-                     Console.WriteLine($"Directory doesn't exist: {formatedPath}");
-                 }
-             }
-             catch (UnauthorizedAccessException ex)
-             {
-                 Console.WriteLine($"Access denied to directory: {formatedPath}. Exception: {ex.Message}");
-             }
-             catch (Exception ex)
-             {
-                 Console.WriteLine($"An error occured while accessing directory:{formatedPath}. Exception:{ex.Message}");
-                 throw;
-             }
-         }).ToList();
-
-        await Task.WhenAll(tasks);
-
-        return fileErrorsCount;
-    }
-
-    public async Task<Dictionary<string, int>> CountUniqueErrorsAsync(DirectoriesDTO model)
-    {
-        var fileErrorsCount = new Dictionary<string, int>();
-
-        foreach (var path in model.DirectoryPaths)
-        {
-            var formatedPath = path.Trim();
             try
             {
-                if (Directory.Exists(formatedPath))
+                if (Directory.Exists(formattedPath))
                 {
-                    //retrieve all log files from directory
-                    var logFiles = Directory.GetFiles(formatedPath, "*.log", SearchOption.AllDirectories);
+                    var logFiles = Directory.GetFiles(formattedPath, "*.log", SearchOption.AllDirectories);
 
-                    // process each log file
-                    foreach (var logFile in logFiles)
+                    var logFileTasks = logFiles.Select(async logFile =>
                     {
-                        var uniqueErrors = new HashSet<string>();
-
+                        var errorOccurrences = new ConcurrentDictionary<string, int>();
                         var logLines = await File.ReadAllLinesAsync(logFile);
 
                         foreach (var line in logLines)
@@ -130,7 +43,57 @@ public class LogsService : ILogsService
                             if (match.Success)
                             {
                                 var errorMessage = ParseLogLine(line);
+                                errorOccurrences.AddOrUpdate(errorMessage, 1, (key, count) => count + 1);
+                            }
+                        }
 
+                        var duplicatedErrors = errorOccurrences.Values.Count(x => x > 1);
+                        fileErrorsCount[logFile] = duplicatedErrors;
+                    });
+
+                    await Task.WhenAll(logFileTasks);
+                }
+                else
+                {
+                    Console.WriteLine($"Directory doesn't exist: {formattedPath}");
+                }
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Console.WriteLine($"Access denied to directory: {formattedPath}. Exception: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An error occurred while accessing directory: {formattedPath}. Exception: {ex.Message}");
+                throw;
+            }
+
+            return fileErrorsCount;
+        }
+
+        public async Task<Dictionary<string, int>> CountUniqueErrorsAsync(DirectoryDTO model)
+        {
+            var fileErrorsCount = new Dictionary<string, int>();
+            var formattedPath = model.DirectoryPath.Trim();
+
+            try
+            {
+                if (Directory.Exists(formattedPath))
+                {
+                    var logFiles = Directory.GetFiles(formattedPath, "*.log", SearchOption.AllDirectories);
+
+                    foreach (var logFile in logFiles)
+                    {
+                        var uniqueErrors = new HashSet<string>();
+                        var logLines = await File.ReadAllLinesAsync(logFile);
+
+                        foreach (var line in logLines)
+                        {
+                            var match = dateTimePattern.Match(line);
+
+                            if (match.Success)
+                            {
+                                var errorMessage = ParseLogLine(line);
                                 uniqueErrors.Add(errorMessage);
                             }
                         }
@@ -140,108 +103,101 @@ public class LogsService : ILogsService
                 }
                 else
                 {
-                    Console.WriteLine($"Directory doesn't exist: {formatedPath}");
+                    Console.WriteLine($"Directory doesn't exist: {formattedPath}");
                 }
             }
             catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine($"Access denied to directory: {formatedPath}. Exception: {ex.Message}");
+                Console.WriteLine($"Access denied to directory: {formattedPath}. Exception: {ex.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"An error occured while accessing directory:{formatedPath}. Exception:{ex.Message}");
+                Console.WriteLine($"An error occurred while accessing directory: {formattedPath}. Exception: {ex.Message}");
                 throw;
             }
+
+            return fileErrorsCount;
         }
 
-        return fileErrorsCount;
-    }
-
-    public async Task<List<string>> SearchLogsAsync(DirectoriesDTO model)
-    {
-        var logFiles = new List<string>();
-
-        foreach (var path in model.DirectoryPaths)
+        public async Task<List<string>> SearchLogsAsync(DirectoryDTO model)
         {
-
-            var formatedPath = path.Trim();
+            var logFiles = new List<string>();
+            var formattedPath = model.DirectoryPath.Trim();
 
             try
             {
-                if (Directory.Exists(formatedPath))
+                if (Directory.Exists(formattedPath))
                 {
-                    var files = await Task.Run(() => Directory.GetFiles(formatedPath, "*.log", SearchOption.AllDirectories));
-
+                    var files = await Task.Run(() => Directory.GetFiles(formattedPath, "*.log", SearchOption.AllDirectories));
                     logFiles.AddRange(files);
                 }
                 else
                 {
-                    Console.WriteLine($"Directory doesn't exist:{formatedPath}");
+                    Console.WriteLine($"Directory doesn't exist: {formattedPath}");
                 }
             }
             catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine($"Access denied to directory with path :{formatedPath}. Exception: {ex.Message}");
-
+                Console.WriteLine($"Access denied to directory with path: {formattedPath}. Exception: {ex.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"An error occured trying to access direcory:{formatedPath}. Exception: {ex.Message}");
+                Console.WriteLine($"An error occurred trying to access directory: {formattedPath}. Exception: {ex.Message}");
             }
 
+            return logFiles;
         }
-        return logFiles;
-    }
 
-    public void UploadLogs()
-    {
-        throw new NotImplementedException();
-    }
-
-
-    public async Task<string> DeleteLogsAsync(PeriodDTO model)
-    {
-        int deletedLogsCount = 0;
-
-        // Iterate through each specified directory
-        foreach (var directoryPath in model.DirectoryPaths)
+        public Task<List<string>> SearchLogsBySizeAsync(SizeRangeDTO model)
         {
-            if (Directory.Exists(directoryPath))
+            var logFiles = new List<string>();
+
+            // Get all files in the specified directory
+            var files = Directory.GetFiles(model.DirectoryPath);
+
+            foreach (var file in files)
             {
-                // Get log files within the date range from the current directory
-                var logFiles = Directory.GetFiles(directoryPath, "*.log")
+                var fileInfo = new FileInfo(file);
+                var fileSizeKB = fileInfo.Length / 1024; // Convert bytes to KB
+
+                if (fileSizeKB >= model.MinSizeKB && fileSizeKB <= model.MaxSizeKB)
+                {
+                    logFiles.Add(file);
+                }
+            }
+
+            return Task.FromResult(logFiles);
+        }
+
+        public async Task<string> DeleteLogsAsync(PeriodDTO model)
+        {
+            int deletedLogsCount = 0;
+
+            if (Directory.Exists(model.DirectoryPath))
+            {
+                var logFiles = Directory.GetFiles(model.DirectoryPath, "*.log")
                     .Where(file => FileInDateRange.IsFileInDateRange(file, model.StartDate, model.EndDate))
                     .ToList();
 
-                // Delete each log file within the date range
                 foreach (var logFile in logFiles)
                 {
                     await Task.Run(() => File.Delete(logFile));
                     deletedLogsCount++;
                 }
             }
+
+            return deletedLogsCount == 0 ? "No logs found for the specified date range." : $"{deletedLogsCount} log(s) successfully deleted.";
         }
 
-        // Return a message based on the number of deleted logs
-        if (deletedLogsCount == 0)
+        private static readonly Regex dateTimePattern = new Regex(@"^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}(:\d{4})?\s+", RegexOptions.Compiled);
+
+        private static string ParseLogLine(string logLine)
         {
-            return "No logs found for the specified date range.";
+            string cleanedLine = dateTimePattern.Replace(logLine, "");
+            cleanedLine = Regex.Replace(cleanedLine, @"\d+\.\d+\.\d+\.\d+", "");
+            return cleanedLine.Trim();
         }
 
-        return $"{deletedLogsCount} log(s) successfully deleted from the specified directories.";
+
     }
-
-    private static readonly Regex dateTimePattern = new Regex(@"^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}(:\d{4})?\s+", RegexOptions.Compiled);
-
-    private static string ParseLogLine(string logLine)
-    {
-        // Remove the timestamp and leading whitespace
-        string cleanedLine = dateTimePattern.Replace(logLine, "");
-
-        cleanedLine = Regex.Replace(cleanedLine, @"\d+\.\d+\.\d+\.\d+", ""); // Remove version numbers
-
-        // Trim any extra spaces at the beginning or end
-        return cleanedLine.Trim();
-    }
-
 }

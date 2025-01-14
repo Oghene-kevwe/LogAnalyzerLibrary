@@ -7,10 +7,10 @@ namespace LogAnalyzerLibrary.Application;
 
 public interface ILogsService
 {
-    Task<List<string>> SearchLogsAsync(DirectoriesDTO model);
-    Task<Dictionary<string, int>> CountUniqueErrorsAsync(DirectoriesDTO model);
-    Task<ConcurrentDictionary<string, int>> CountDuplicatedErrorsAsync(DirectoriesDTO model);
-    Task<string> DeleteLogsAsync(PeriodDTO archiveDto);
-    Task<string> CountTotalLogsAsync(PeriodDTO archiveDto);
-    void UploadLogs();
+    Task<List<string>> SearchLogsAsync(DirectoryDTO model);
+    Task<Dictionary<string, int>> CountUniqueErrorsAsync(DirectoryDTO model);
+    Task<ConcurrentDictionary<string, int>> CountDuplicatedErrorsAsync(DirectoryDTO model);
+    Task<string> DeleteLogsAsync(PeriodDTO model);
+    Task<string> CountTotalLogsAsync(PeriodDTO model);
+    Task<List<string>> SearchLogsBySizeAsync(SizeRangeDTO model);
 }

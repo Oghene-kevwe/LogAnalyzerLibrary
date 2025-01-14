@@ -1,7 +1,7 @@
 ﻿namespace LogAnalyzerLibrary.Application.DTOs;
 
-public class DirectoriesDTO
+public class DirectoryDTO
 {
-    public required IEnumerable<string> DirectoryPaths { get; set; }
+    public required string DirectoryPath { get; set; }
 
 }

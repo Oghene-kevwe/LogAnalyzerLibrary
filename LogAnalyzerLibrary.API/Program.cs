@@ -1,5 +1,6 @@
 using LogAnalyzerLibrary.Application;
 using LogAnalyzerLibrary.Application.ArchiveService;
+using LogAnalyzerLibrary.Integration.CloudinaryIntegration;
 using Scalar.AspNetCore;
 
 
@@ -13,10 +14,10 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddScoped<ILogsService, LogsService>();
 builder.Services.AddScoped<IArchiveService, ArchiveService>();
+builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 
 var app = builder.Build();
 
-//var directories = new[] { "C:\\Amadeologs", "C:\\AWIErrors", "C:\\Loggings", };
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

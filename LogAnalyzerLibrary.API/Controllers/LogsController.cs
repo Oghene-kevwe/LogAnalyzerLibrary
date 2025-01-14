@@ -1,28 +1,27 @@
 ﻿using LogAnalyzerLibrary.Application;
 using LogAnalyzerLibrary.Application.DTOs;
+using LogAnalyzerLibrary.Integration.CloudinaryIntegration;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LogAnalyzerLibrary.API.Controllers
 {
     [ApiController]
     [Route("api/logsanalyzer/logs")]
-    public class LogsController(ILogsService logsService) : ControllerBase
+    public class LogsController(ILogsService logsService, ICloudinaryService cloudinaryService) : ControllerBase
     {
 
-        [HttpGet("{startDate}/{endDate}")]
-        public async Task<IActionResult> CountLogs([FromRoute] DateTime startDate, [FromRoute] DateTime endDate, [FromBody] PeriodDTO model)
+
+
+        [HttpGet("total-logs")]
+        public async Task<IActionResult> CountLogs([FromQuery] PeriodDTO model)
         {
             try
             {
                 // Validate if the start date is earlier than the end date
-                if (startDate > endDate)
+                if (model.StartDate > model.EndDate)
                 {
                     return BadRequest("Start date cannot be later than the end date.");
                 }
-
-                // Set the start and end dates on the ArchiveDTO
-                model.StartDate = startDate;
-                model.EndDate = endDate;
 
                 // Call the service method to count logs within the specified date range
                 var result = await logsService.CountTotalLogsAsync(model);
@@ -42,8 +41,8 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
         }
 
-        [HttpPost("search")]
-        public async Task<IActionResult> SearchLogs([FromBody] DirectoriesDTO model)
+        [HttpGet("search/{model}")]
+        public async Task<IActionResult> SearchLogs([FromRoute] DirectoryDTO model)
         {
             try
             {
@@ -62,19 +61,42 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
         }
 
+        [HttpGet("search-by-size")]
+        public async Task<IActionResult> SearchLogsBySize([FromQuery] SizeRangeDTO model)
+        {
+            if (model.MinSizeKB <= 0 || model.MaxSizeKB <= 0 || model.MinSizeKB > model.MaxSizeKB)
+            {
+                return BadRequest("Invalid size range");
+            }
+
+            var logs = await logsService.SearchLogsBySizeAsync(model);
+
+            if (logs.Count == 0)
+            {
+                return NotFound("No logs found in the specified size range.");
+            }
+
+            return Ok(logs);
+        }
+
         [HttpDelete("{startDate}/{endDate}")]
         public async Task<IActionResult> DeleteLogs([FromRoute] DateTime startDate, [FromRoute] DateTime endDate, [FromBody] PeriodDTO model)
         {
 
-
-            // Check if model is null
-            if (model == null)
-            {
-                return BadRequest("Invalid request data.");
-            }
-
             try
             {
+
+                // Check if model is null
+                if (model == null)
+                {
+                    return BadRequest("Invalid request data.");
+                }
+
+                if (startDate > endDate)
+                {
+                    return BadRequest("Start date cannot be later than the end date.");
+                }
+
                 model.StartDate = startDate;
                 model.EndDate = endDate;
 
@@ -103,9 +125,9 @@ namespace LogAnalyzerLibrary.API.Controllers
         }
 
         [HttpPost("unique-errors")]
-        public async Task<IActionResult> CountUniqueErrors([FromBody] DirectoriesDTO model)
+        public async Task<IActionResult> CountUniqueErrors([FromBody] DirectoryDTO model)
         {
-            if (model.DirectoryPaths == null || !model.DirectoryPaths.Any())
+            if (model.DirectoryPath == null || !model.DirectoryPath.Any())
             {
                 // Return a 400 Bad Request if the directory paths are empty or null
                 return BadRequest("Directory paths cannot be null or empty.");
@@ -139,9 +161,9 @@ namespace LogAnalyzerLibrary.API.Controllers
         }
 
         [HttpPost("duplicate-errors")]
-        public async Task<IActionResult> CountDuplicatedErrors([FromBody] DirectoriesDTO model)
+        public async Task<IActionResult> CountDuplicatedErrors([FromBody] DirectoryDTO model)
         {
-            if (model.DirectoryPaths == null || !model.DirectoryPaths.Any())
+            if (model.DirectoryPath == null || !model.DirectoryPath.Any())
             {
                 // Return a 400 Bad Request if the directory paths are empty or null
                 return BadRequest("Directory paths cannot be null or empty.");
@@ -169,6 +191,24 @@ namespace LogAnalyzerLibrary.API.Controllers
                 return StatusCode(500, $"Internal server error: {ex.Message}");
             }
         }
+
+        [HttpPost("upload-logs")]
+        public async Task<IActionResult> UploadLogs([FromForm] List<IFormFile> files)
+        {
+
+            try
+            {
+                var uploadedUrls = await cloudinaryService.UploadFilesAsync(files);
+
+                // Return the list of uploaded URLs
+                return Ok(uploadedUrls);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest($"Error uploading files: {ex.Message}");
+            }
+        }
+
 
     }
 }

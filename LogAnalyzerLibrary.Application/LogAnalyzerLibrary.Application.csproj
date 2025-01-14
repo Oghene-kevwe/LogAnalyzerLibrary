@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\LogAnalyzerLibrary.Integration\LogAnalyzerLibrary.Integration.csproj" />
+  </ItemGroup>
+
 </Project>
