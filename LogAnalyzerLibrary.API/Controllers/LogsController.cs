@@ -13,7 +13,7 @@ namespace LogAnalyzerLibrary.API.Controllers
 
 
         [HttpGet("total-logs")]
-        public async Task<IActionResult> CountLogs([FromQuery] PeriodDTO model)
+        public async Task<IActionResult> CountLogs([FromQuery] PeriodDirectoryListDTO model)
         {
             try
             {
@@ -22,6 +22,11 @@ namespace LogAnalyzerLibrary.API.Controllers
                 {
                     return BadRequest("Start date cannot be later than the end date.");
                 }
+
+                //trim model
+                model.DirectoryCollection = model.DirectoryCollection
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x));
 
                 // Call the service method to count logs within the specified date range
                 var result = await logsService.CountTotalLogsAsync(model);
@@ -41,8 +46,8 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
         }
 
-        [HttpGet("search/{model}")]
-        public async Task<IActionResult> SearchLogs([FromRoute] DirectoryDTO model)
+        [HttpGet("search-by-dir")]
+        public async Task<IActionResult> SearchLogs([FromQuery] DirectoryDTO model)
         {
             try
             {
@@ -64,23 +69,34 @@ namespace LogAnalyzerLibrary.API.Controllers
         [HttpGet("search-by-size")]
         public async Task<IActionResult> SearchLogsBySize([FromQuery] SizeRangeDTO model)
         {
-            if (model.MinSizeKB <= 0 || model.MaxSizeKB <= 0 || model.MinSizeKB > model.MaxSizeKB)
+
+            try
             {
-                return BadRequest("Invalid size range");
+                if (model.MinSizeKB <= 0 || model.MaxSizeKB <= 0 || model.MinSizeKB > model.MaxSizeKB)
+                {
+                    return BadRequest("Invalid size range");
+                }
+
+                var logs = await logsService.SearchLogsBySizeAsync(model);
+
+                if (logs.Count == 0)
+                {
+                    return NotFound("No logs found in the specified size range.");
+                }
+
+                return Ok(logs);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"An error occurred while searching for logs: {ex.Message}");
             }
 
-            var logs = await logsService.SearchLogsBySizeAsync(model);
 
-            if (logs.Count == 0)
-            {
-                return NotFound("No logs found in the specified size range.");
-            }
 
-            return Ok(logs);
         }
 
-        [HttpDelete("{startDate}/{endDate}")]
-        public async Task<IActionResult> DeleteLogs([FromRoute] DateTime startDate, [FromRoute] DateTime endDate, [FromBody] PeriodDTO model)
+        [HttpDelete]
+        public async Task<IActionResult> DeleteLogs([FromQuery] PeriodDirectoryListDTO model)
         {
 
             try
@@ -92,13 +108,16 @@ namespace LogAnalyzerLibrary.API.Controllers
                     return BadRequest("Invalid request data.");
                 }
 
-                if (startDate > endDate)
+                //trim model
+                model.DirectoryCollection = model.DirectoryCollection
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x));
+
+                if (model.StartDate > model.EndDate)
                 {
                     return BadRequest("Start date cannot be later than the end date.");
                 }
 
-                model.StartDate = startDate;
-                model.EndDate = endDate;
 
                 // Call the service method to delete logs within the specified date range
                 var result = await logsService.DeleteLogsAsync(model);
@@ -111,27 +130,16 @@ namespace LogAnalyzerLibrary.API.Controllers
 
                 return Ok(result); // Return a 200 if logs are successfully deleted
             }
-            catch (FileNotFoundException ex)
-            {
-                return NotFound(ex.Message);
-            }
             catch (Exception ex)
             {
                 // Log the exception (not shown here)
                 return StatusCode(500, $"An error occurred while deleting logs. {ex.Message}");
             }
-
-
         }
 
-        [HttpPost("unique-errors")]
-        public async Task<IActionResult> CountUniqueErrors([FromBody] DirectoryDTO model)
+        [HttpGet("unique-errors")]
+        public async Task<IActionResult> CountUniqueErrors([FromQuery] DirectoryDTO model)
         {
-            if (model.DirectoryPath == null || !model.DirectoryPath.Any())
-            {
-                // Return a 400 Bad Request if the directory paths are empty or null
-                return BadRequest("Directory paths cannot be null or empty.");
-            }
 
             try
             {
@@ -160,19 +168,14 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
         }
 
-        [HttpPost("duplicate-errors")]
-        public async Task<IActionResult> CountDuplicatedErrors([FromBody] DirectoryDTO model)
+        [HttpGet("duplicate-errors")]
+        public async Task<IActionResult> CountDuplicatedErrors([FromQuery] DirectoryDTO model)
         {
-            if (model.DirectoryPath == null || !model.DirectoryPath.Any())
-            {
-                // Return a 400 Bad Request if the directory paths are empty or null
-                return BadRequest("Directory paths cannot be null or empty.");
-            }
-
             try
             {
                 var errorsCount = await logsService.CountDuplicatedErrorsAsync(model);
-                if (errorsCount == null || errorsCount.Count == 0)
+
+                if (errorsCount == null || errorsCount.IsEmpty)
                 {
                     return NotFound("No errors found in the specified directories.");
                 }
@@ -205,7 +208,7 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest($"Error uploading files: {ex.Message}");
+                return StatusCode(500, $"Error uploading files: {ex.Message}");
             }
         }
 

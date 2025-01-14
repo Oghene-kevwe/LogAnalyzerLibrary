@@ -8,12 +8,12 @@ namespace LogAnalyzerLibrary.Application.ArchiveService
     {
         public async Task<List<string>> ArchiveLogsAsync(PeriodDTO model)
         {
-            List<string> createdZipFiles = [];
+            List<string> createdZipFiles = new List<string>();
 
-            var directoryPath = model.DirectoryPath;
+            var directoryPath = model.DirectoryPath.Trim();
             if (Directory.Exists(directoryPath))
             {
-                var logFiles = Directory.GetFiles(directoryPath, "*.log")
+                var logFiles = Directory.GetFiles(directoryPath, "*.log", SearchOption.AllDirectories)
                     .Where(file => FileInDateRange.IsFileInDateRange(file, model.StartDate, model.EndDate))
                     .ToList();
 
@@ -34,6 +34,14 @@ namespace LogAnalyzerLibrary.Application.ArchiveService
 
                     createdZipFiles.Add(zipFilePath);
                 }
+                else
+                {
+                    return new List<string> { "No log files found for the specified date range." };
+                }
+            }
+            else
+            {
+                return new List<string> { $"Directory : {directoryPath} does not exist." };
             }
 
             if (createdZipFiles.Count == 0)
@@ -44,17 +52,23 @@ namespace LogAnalyzerLibrary.Application.ArchiveService
             return createdZipFiles;
         }
 
+
         public async Task<string> DeleteArchiveAsync(PeriodDTO model)
         {
             bool anyFilesDeleted = false;
             List<string> deletedFiles = new List<string>();
 
-            var directoryPath = model.DirectoryPath;
+            var directoryPath = model.DirectoryPath.Trim();
             if (Directory.Exists(directoryPath))
             {
                 await Task.Run(() =>
                 {
                     var zipFiles = Directory.GetFiles(directoryPath, "*.zip", SearchOption.AllDirectories);
+
+                    if (zipFiles.Length == 0)
+                    {
+                        throw new FileNotFoundException("No zip files found in the specified directory.");
+                    }
 
                     foreach (var zipFile in zipFiles)
                     {
@@ -66,14 +80,19 @@ namespace LogAnalyzerLibrary.Application.ArchiveService
                         }
                     }
                 });
-            }
 
-            if (!anyFilesDeleted)
+                if (!anyFilesDeleted)
+                {
+                    return "No zip files found for the specified date range.";
+                }
+
+                return $"Archive deleted successfully. Deleted files: {string.Join(", ", deletedFiles)}";
+            }
+            else
             {
-                throw new FileNotFoundException("No zip files found in the specified date range.");
+                return "Directory does not exist.";
             }
-
-            return $"Archive deleted successfully. Deleted files: {string.Join(", ", deletedFiles)}";
         }
+
     }
 }

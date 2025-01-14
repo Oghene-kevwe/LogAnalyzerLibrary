@@ -13,20 +13,20 @@ namespace LogAnalyzerLibrary.API.Controllers
         [HttpPost]
         public async Task<IActionResult> ArchiveLogs([FromBody] PeriodDTO request)
         {
-            if (request.DirectoryPath == null || !request.DirectoryPath.Any())
-            {
-                // Return a 400 Bad Request if the directory paths are empty or null
-                return BadRequest("Directory paths cannot be null or empty.");
-            }
-
-            if (request.StartDate > request.EndDate)
-            {
-                return BadRequest("Start date cannot be later than the end date.");
-            }
-
-
             try
             {
+                if (request.DirectoryPath == null || !request.DirectoryPath.Any())
+                {
+                    // Return a 400 Bad Request if the directory paths are empty or null
+                    return BadRequest("Directory paths cannot be null or empty.");
+                }
+
+                if (request.StartDate > request.EndDate)
+                {
+                    return BadRequest("Start date cannot be later than the end date.");
+                }
+
+
                 List<string> result = await archiveService.ArchiveLogsAsync(request);
                 return Ok(new { message = result });
             }
@@ -55,7 +55,6 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
             catch (Exception ex)
             {
-                // Log the exception (not shown here)
                 return StatusCode(500, $"An error occurred while deleting archives. {ex.Message}");
             }
         }

@@ -7,14 +7,26 @@ namespace LogAnalyzerLibrary.Application
 {
     public class LogsService : ILogsService
     {
-        public async Task<string> CountTotalLogsAsync(PeriodDTO model)
+
+        public async Task<string> CountTotalLogsAsync(PeriodDirectoryListDTO model)
         {
             int logCount = 0;
 
-            if (Directory.Exists(model.DirectoryPath))
+            // Iterate over multiple directory paths
+            foreach (var directoryPath in model.DirectoryCollection)
             {
-                var logFiles = await Task.Run(() => Directory.GetFiles(model.DirectoryPath, "*.log"));
-                logCount += logFiles.Count(file => FileInDateRange.IsFileInDateRange(file, model.StartDate, model.EndDate));
+                if (Directory.Exists(directoryPath))
+                {
+                    // Get all log files in the directory
+                    var logFiles = await Task.Run(() => Directory.GetFiles(directoryPath, "*.log", SearchOption.AllDirectories));
+
+                    // Count files within the date range
+                    logCount += logFiles.Count(file => FileInDateRange.IsFileInDateRange(file, model.StartDate, model.EndDate));
+                }
+                else
+                {
+                    throw new DirectoryNotFoundException($"Directory {directoryPath}: not found");
+                }
             }
 
             return logCount == 0 ? "No logs found for the specified date range." : $"Total logs found: {logCount}";
@@ -23,49 +35,38 @@ namespace LogAnalyzerLibrary.Application
         public async Task<ConcurrentDictionary<string, int>> CountDuplicatedErrorsAsync(DirectoryDTO model)
         {
             var fileErrorsCount = new ConcurrentDictionary<string, int>();
-            var formattedPath = model.DirectoryPath.Trim();
 
-            try
+
+            if (Directory.Exists(model.DirectoryPath))
             {
-                if (Directory.Exists(formattedPath))
-                {
-                    var logFiles = Directory.GetFiles(formattedPath, "*.log", SearchOption.AllDirectories);
+                var logFiles = Directory.GetFiles(model.DirectoryPath, "*.log", SearchOption.AllDirectories);
 
-                    var logFileTasks = logFiles.Select(async logFile =>
+                var logFileTasks = logFiles.Select(async logFile =>
+                {
+                    var errorOccurrences = new ConcurrentDictionary<string, int>();
+                    var logLines = await File.ReadAllLinesAsync(logFile);
+
+                    foreach (var line in logLines)
                     {
-                        var errorOccurrences = new ConcurrentDictionary<string, int>();
-                        var logLines = await File.ReadAllLinesAsync(logFile);
+                        var match = dateTimePattern.Match(line);
 
-                        foreach (var line in logLines)
+                        if (match.Success)
                         {
-                            var match = dateTimePattern.Match(line);
-
-                            if (match.Success)
-                            {
-                                var errorMessage = ParseLogLine(line);
-                                errorOccurrences.AddOrUpdate(errorMessage, 1, (key, count) => count + 1);
-                            }
+                            var errorMessage = ParseLogLine(line);
+                            errorOccurrences.AddOrUpdate(errorMessage, 1, (key, count) => count + 1);
                         }
+                    }
 
-                        var duplicatedErrors = errorOccurrences.Values.Count(x => x > 1);
-                        fileErrorsCount[logFile] = duplicatedErrors;
-                    });
+                    var duplicatedErrors = errorOccurrences.Values.Count(x => x > 1);
+                    fileErrorsCount[logFile] = duplicatedErrors;
+                });
 
-                    await Task.WhenAll(logFileTasks);
-                }
-                else
-                {
-                    Console.WriteLine($"Directory doesn't exist: {formattedPath}");
-                }
+                await Task.WhenAll(logFileTasks);
             }
-            catch (UnauthorizedAccessException ex)
+            else
             {
-                Console.WriteLine($"Access denied to directory: {formattedPath}. Exception: {ex.Message}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An error occurred while accessing directory: {formattedPath}. Exception: {ex.Message}");
-                throw;
+                Console.Write($"Directory doesn't exist: {model.DirectoryPath}");
+                throw new DirectoryNotFoundException($"Directory {model.DirectoryPath}: not found");
             }
 
             return fileErrorsCount;
@@ -74,46 +75,35 @@ namespace LogAnalyzerLibrary.Application
         public async Task<Dictionary<string, int>> CountUniqueErrorsAsync(DirectoryDTO model)
         {
             var fileErrorsCount = new Dictionary<string, int>();
-            var formattedPath = model.DirectoryPath.Trim();
 
-            try
+            if (Directory.Exists(model.DirectoryPath))
             {
-                if (Directory.Exists(formattedPath))
-                {
-                    var logFiles = Directory.GetFiles(formattedPath, "*.log", SearchOption.AllDirectories);
+                var logFiles = Directory.GetFiles(model.DirectoryPath, "*.log", SearchOption.AllDirectories);
 
-                    foreach (var logFile in logFiles)
+                foreach (var logFile in logFiles)
+                {
+                    var uniqueErrors = new HashSet<string>();
+                    var logLines = await File.ReadAllLinesAsync(logFile);
+
+                    foreach (var line in logLines)
                     {
-                        var uniqueErrors = new HashSet<string>();
-                        var logLines = await File.ReadAllLinesAsync(logFile);
+                        var match = dateTimePattern.Match(line);
 
-                        foreach (var line in logLines)
+                        if (match.Success)
                         {
-                            var match = dateTimePattern.Match(line);
-
-                            if (match.Success)
-                            {
-                                var errorMessage = ParseLogLine(line);
-                                uniqueErrors.Add(errorMessage);
-                            }
+                            var errorMessage = ParseLogLine(line);
+                            uniqueErrors.Add(errorMessage);
                         }
-
-                        fileErrorsCount[logFile] = uniqueErrors.Count;
                     }
-                }
-                else
-                {
-                    Console.WriteLine($"Directory doesn't exist: {formattedPath}");
+
+                    fileErrorsCount[logFile] = uniqueErrors.Count;
                 }
             }
-            catch (UnauthorizedAccessException ex)
+            else
             {
-                Console.WriteLine($"Access denied to directory: {formattedPath}. Exception: {ex.Message}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An error occurred while accessing directory: {formattedPath}. Exception: {ex.Message}");
-                throw;
+
+                Console.WriteLine($"Directory doesn't exist: {model.DirectoryPath}");
+                throw new DirectoryNotFoundException($"Directory {model.DirectoryPath}: not found");
             }
 
             return fileErrorsCount;
@@ -122,27 +112,24 @@ namespace LogAnalyzerLibrary.Application
         public async Task<List<string>> SearchLogsAsync(DirectoryDTO model)
         {
             var logFiles = new List<string>();
-            var formattedPath = model.DirectoryPath.Trim();
+
 
             try
             {
-                if (Directory.Exists(formattedPath))
+                if (Directory.Exists(model.DirectoryPath))
                 {
-                    var files = await Task.Run(() => Directory.GetFiles(formattedPath, "*.log", SearchOption.AllDirectories));
+                    var files = await Task.Run(() => Directory.GetFiles(model.DirectoryPath, "*.log", SearchOption.AllDirectories));
                     logFiles.AddRange(files);
                 }
                 else
                 {
-                    Console.WriteLine($"Directory doesn't exist: {formattedPath}");
+                    throw new DirectoryNotFoundException($"Directory {model.DirectoryPath} not found");
                 }
             }
             catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine($"Access denied to directory with path: {formattedPath}. Exception: {ex.Message}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An error occurred trying to access directory: {formattedPath}. Exception: {ex.Message}");
+                Console.WriteLine($"Access denied to directory with path: {model.DirectoryPath}. Exception: {ex.Message}");
+                throw new UnauthorizedAccessException($"Access denied to directory with path: {model.DirectoryPath}. Exception: {ex.Message}");
             }
 
             return logFiles;
@@ -152,42 +139,70 @@ namespace LogAnalyzerLibrary.Application
         {
             var logFiles = new List<string>();
 
-            // Get all files in the specified directory
-            var files = Directory.GetFiles(model.DirectoryPath);
-
-            foreach (var file in files)
+            try
             {
-                var fileInfo = new FileInfo(file);
-                var fileSizeKB = fileInfo.Length / 1024; // Convert bytes to KB
-
-                if (fileSizeKB >= model.MinSizeKB && fileSizeKB <= model.MaxSizeKB)
+                // Get all files in the specified directory
+                if (Directory.Exists(model.DirectoryPath))
                 {
-                    logFiles.Add(file);
+                    var files = Directory.GetFiles(model.DirectoryPath, "*.log", SearchOption.AllDirectories);
+
+                    foreach (var file in files)
+                    {
+                        var fileInfo = new FileInfo(file);
+                        var fileSizeKB = fileInfo.Length / 1024; // Convert bytes to KB
+
+                        if (fileSizeKB >= model.MinSizeKB && fileSizeKB <= model.MaxSizeKB)
+                        {
+                            logFiles.Add(file);
+                        }
+                    }
+                }
+                else
+                {
+                    throw new DirectoryNotFoundException($"Directory {model.DirectoryPath} not found");
                 }
             }
+            catch (UnauthorizedAccessException ex)
+            {
+                Console.WriteLine($"Access denied to directory with path: {model.DirectoryPath}. Exception: {ex.Message}");
+                throw new UnauthorizedAccessException($"Access denied to directory with path: {model.DirectoryPath}. Exception: {ex.Message}");
+            }
+
+
 
             return Task.FromResult(logFiles);
         }
 
-        public async Task<string> DeleteLogsAsync(PeriodDTO model)
+        public async Task<string> DeleteLogsAsync(PeriodDirectoryListDTO model)
         {
             int deletedLogsCount = 0;
 
-            if (Directory.Exists(model.DirectoryPath))
+            // Iterate over each directory path in the collection
+            foreach (var directoryPath in model.DirectoryCollection)
             {
-                var logFiles = Directory.GetFiles(model.DirectoryPath, "*.log")
-                    .Where(file => FileInDateRange.IsFileInDateRange(file, model.StartDate, model.EndDate))
-                    .ToList();
-
-                foreach (var logFile in logFiles)
+                if (Directory.Exists(directoryPath))
                 {
-                    await Task.Run(() => File.Delete(logFile));
-                    deletedLogsCount++;
+                    // Get all log files in the directory and subdirectories that match the date range
+                    var logFiles = Directory.GetFiles(directoryPath, "*.log", SearchOption.AllDirectories)
+                        .Where(file => FileInDateRange.IsFileInDateRange(file, model.StartDate, model.EndDate))
+                        .ToList();
+
+                    // Delete each log file
+                    foreach (var logFile in logFiles)
+                    {
+                        await Task.Run(() => File.Delete(logFile));
+                        deletedLogsCount++;
+                    }
+                }
+                else
+                {
+                    throw new DirectoryNotFoundException($"Directory {directoryPath} not found");
                 }
             }
 
             return deletedLogsCount == 0 ? "No logs found for the specified date range." : $"{deletedLogsCount} log(s) successfully deleted.";
         }
+
 
         private static readonly Regex dateTimePattern = new Regex(@"^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}(:\d{4})?\s+", RegexOptions.Compiled);
 
