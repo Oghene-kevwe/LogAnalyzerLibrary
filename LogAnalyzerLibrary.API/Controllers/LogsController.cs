@@ -11,7 +11,11 @@ namespace LogAnalyzerLibrary.API.Controllers
     {
 
 
-
+        /// <summary>
+        /// Counts the total logs within a specified date range and directories.
+        /// </summary>
+        /// <param name="model">The period and directory list to filter the logs.</param>
+        /// <returns>A response containing the total count of logs or a not found message.</returns>
         [HttpGet("total-logs")]
         public async Task<IActionResult> CountLogs([FromQuery] PeriodDirectoryListDTO model)
         {
@@ -46,6 +50,11 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
         }
 
+        /// <summary>
+        /// Searches for logs by directory paths.
+        /// </summary>
+        /// <param name="model">The directory details to search for logs.</param>
+        /// <returns>A response containing the found log files or a not found message.</returns>
         [HttpGet("search-by-dir")]
         public async Task<IActionResult> SearchLogs([FromQuery] DirectoryDTO model)
         {
@@ -66,6 +75,11 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
         }
 
+        /// <summary>
+        /// Searches for logs by size range.
+        /// </summary>
+        /// <param name="model">The size range and directory details to search for logs.</param>
+        /// <returns>A response containing the found logs or a not found message.</returns>
         [HttpGet("search-by-size")]
         public async Task<IActionResult> SearchLogsBySize([FromQuery] SizeRangeDTO model)
         {
@@ -95,6 +109,11 @@ namespace LogAnalyzerLibrary.API.Controllers
 
         }
 
+        /// <summary>
+        /// Deletes logs within a specified date range and directories.
+        /// </summary>
+        /// <param name="model">The period and directory list to filter the logs to delete.</param>
+        /// <returns>A response indicating the success or failure of the deletion.</returns>
         [HttpDelete]
         public async Task<IActionResult> DeleteLogs([FromQuery] PeriodDirectoryListDTO model)
         {
@@ -137,6 +156,11 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
         }
 
+        /// <summary>
+        /// Counts unique errors found within specified directories.
+        /// </summary>
+        /// <param name="model">The directory details to count unique errors.</param>
+        /// <returns>A response containing the count of unique errors or a not found message.</returns>
         [HttpGet("unique-errors")]
         public async Task<IActionResult> CountUniqueErrors([FromQuery] DirectoryDTO model)
         {
@@ -168,6 +192,11 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
         }
 
+        /// <summary>
+        /// Counts duplicated errors found within specified directories.
+        /// </summary>
+        /// <param name="model">The directory details to count duplicated errors.</param>
+        /// <returns>A response containing the count of duplicated errors or a not found message.</returns>
         [HttpGet("duplicate-errors")]
         public async Task<IActionResult> CountDuplicatedErrors([FromQuery] DirectoryDTO model)
         {
@@ -195,6 +224,11 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
         }
 
+        /// <summary>
+        /// Uploads log files to Cloudinary.
+        /// </summary>
+        /// <param name="files">The list of log files to be uploaded.</param>
+        /// <returns>A response containing the uploaded file URLs.</returns>
         [HttpPost("upload-logs")]
         public async Task<IActionResult> UploadLogs([FromForm] List<IFormFile> files)
         {

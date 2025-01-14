@@ -10,6 +10,14 @@ namespace LogAnalyzerLibrary.API.Controllers
     public class ArchiveController(IArchiveService archiveService) : ControllerBase
     {
 
+        /// <summary>
+        /// Archives logs based on the provided period and directory path.
+        /// </summary>
+        /// <param name="request">The period and directory information to filter logs for archiving.</param>
+        /// <returns>A response with a success message or error details.</returns>
+        /// <response code="200">Logs successfully archived.</response>
+        /// <response code="400">Bad request if directory path is empty or invalid dates are provided.</response>
+        /// <response code="500">Internal server error if an exception occurs during archiving.</response>
         [HttpPost]
         public async Task<IActionResult> ArchiveLogs([FromBody] PeriodDTO request)
         {
@@ -36,6 +44,15 @@ namespace LogAnalyzerLibrary.API.Controllers
             }
         }
 
+        /// <summary>
+        /// Deletes log archives based on the provided period.
+        /// </summary>
+        /// <param name="model">The period to filter logs for deletion.</param>
+        /// <returns>A response with a success message or error details.</returns>
+        /// <response code="200">Archives successfully deleted.</response>
+        /// <response code="400">Bad request if invalid dates are provided.</response>
+        /// <response code="404">Not found if the archive file is not found.</response>
+        /// <response code="500">Internal server error if an exception occurs during deletion.</response>
         [HttpDelete]
         public async Task<IActionResult> DeleteArchives([FromQuery] PeriodDTO model)
         {
